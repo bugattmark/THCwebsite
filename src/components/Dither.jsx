@@ -5,7 +5,6 @@ import { EffectComposer, wrapEffect } from '@react-three/postprocessing';
 import { Effect } from 'postprocessing';
 import * as THREE from 'three';
 
-import './Dither.css';
 
 const waveVertexShader = `
 precision highp float;
@@ -234,6 +233,9 @@ function DitheredWaves({
     mouseRef.current.set((e.clientX - rect.left) * dpr, (e.clientY - rect.top) * dpr);
   };
 
+  // Three.js shader materials require accessing refs during render
+  const uniforms = waveUniformsRef.current;
+
   return (
     <>
       <mesh ref={mesh} scale={[viewport.width, viewport.height, 1]}>
@@ -241,7 +243,7 @@ function DitheredWaves({
         <shaderMaterial
           vertexShader={waveVertexShader}
           fragmentShader={waveFragmentShader}
-          uniforms={waveUniformsRef.current}
+          uniforms={uniforms}
         />
       </mesh>
 
@@ -275,7 +277,7 @@ export default function Dither({
 }) {
   return (
     <Canvas
-      className="dither-container"
+      className="absolute top-0 left-0 w-full h-full"
       camera={{ position: [0, 0, 6] }}
       dpr={1}
       gl={{ antialias: true, preserveDrawingBuffer: true }}

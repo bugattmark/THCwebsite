@@ -6,32 +6,43 @@ import { BallCollider, CuboidCollider, Physics, RigidBody, useRopeJoint, useSphe
 import { MeshLineGeometry, MeshLineMaterial } from 'meshline';
 
 import cardGLB from '../assets/lanyard/card.glb';
-import lanyardPng from '../assets/lanyard/lanyard.png';
+import hackCollectiveLogo from '/hack-collective-logo.png';
 
 import * as THREE from 'three';
-import './Lanyard.css';
 
 extend({ MeshLineGeometry, MeshLineMaterial });
 
-export default function Lanyard({ position = [0, 0, 30], gravity = [0, -40, 0], fov = 20, transparent = true }) {
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+export default function Lanyard({ position = [0, 0, 25], gravity = [0, -40, 0], fov = 25, transparent = true }) {
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const width = window.innerWidth;
+    // Consider iPad as mobile for performance
+    return width < 1024;
+  });
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    const handleResize = () => {
+      const width = window.innerWidth;
+      setIsMobile(width < 1024);
+    };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   return (
-    <div className="lanyard-wrapper">
+    <div className="w-full h-full relative">
       <Canvas
-        camera={{ position: position, fov: fov }}
+        camera={{ position, fov }}
         dpr={[1, isMobile ? 1.5 : 2]}
         gl={{ alpha: transparent }}
-        onCreated={({ gl }) => gl.setClearColor(new THREE.Color(0x000000), transparent ? 0 : 1)}
+        onCreated={({ gl, camera }) => {
+          gl.setClearColor(0x000000, transparent ? 0 : 1);
+          // Adjust camera to show full lanyard
+          camera.lookAt(0, 2, 0);
+        }}
       >
         <ambientLight intensity={Math.PI} />
-        <Physics gravity={gravity} timeStep={isMobile ? 1 / 30 : 1 / 60}>
+        <Physics gravity={gravity} timeStep={isMobile ? 1 / 30 : 1 / 60} paused={false}>
           <Band isMobile={isMobile} />
         </Physics>
         <Environment blur={0.75}>
@@ -82,13 +93,26 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }) {
     dir = new THREE.Vector3();
   const segmentProps = { type: 'dynamic', canSleep: true, colliders: false, angularDamping: 4, linearDamping: 4 };
   const { nodes, materials } = useGLTF(cardGLB);
-  const texture = useTexture(lanyardPng);
+  const logoTexture = useTexture(hackCollectiveLogo);
   const [curve] = useState(
     () =>
       new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()])
   );
   const [dragged, drag] = useState(false);
   const [hovered, hover] = useState(false);
+
+  // Configure logo texture for square card (now 1.125 x 1.125)
+  // Logo is 1:1 square, card is now 1:1 square, so no adjustment needed
+  useEffect(() => {
+    if (logoTexture) {
+      // Three.js textures need to be mutated - this is expected behavior
+      logoTexture.wrapS = THREE.ClampToEdgeWrapping;
+      logoTexture.wrapT = THREE.ClampToEdgeWrapping;
+      // Card is now square, so logo fits perfectly 1:1
+      logoTexture.repeat.set(1, 1);
+      logoTexture.offset.set(0, 0);
+    }
+  }, [logoTexture]);
 
   useRopeJoint(fixed, j1, [[0, 0, 0], [0, 0, 0], 1]);
   useRopeJoint(j1, j2, [[0, 0, 0], [0, 0, 0], 1]);
@@ -133,8 +157,8 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }) {
     }
   });
 
+  // Three.js curve and texture objects need to be mutated - this is expected behavior
   curve.curveType = 'chordal';
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
 
   return (
     <>
@@ -150,9 +174,10 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }) {
           <BallCollider args={[0.1]} />
         </RigidBody>
         <RigidBody position={[2, 0, 0]} ref={card} {...segmentProps} type={dragged ? 'kinematicPosition' : 'dynamic'}>
-          <CuboidCollider args={[0.8, 1.125, 0.01]} />
+          {/* Make card square: scale width from 0.8 to 1.125 to match height */}
+          <CuboidCollider args={[1.125, 1.125, 0.01]} />
           <group
-            scale={2.25}
+            scale={[2.25 * (1.125 / 0.8), 2.25, 2.25]} // Scale X to make square (1.125/0.8 = 1.40625)
             position={[0, -1.2, -0.05]}
             onPointerOver={() => hover(true)}
             onPointerOut={() => hover(false)}
@@ -164,7 +189,7 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }) {
           >
             <mesh geometry={nodes.card.geometry}>
               <meshPhysicalMaterial
-                map={materials.base.map}
+                map={logoTexture}
                 map-anisotropy={16}
                 clearcoat={isMobile ? 0 : 1}
                 clearcoatRoughness={0.15}
@@ -183,9 +208,6 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }) {
           color="white"
           depthTest={false}
           resolution={isMobile ? [1000, 2000] : [1000, 1000]}
-          useMap
-          map={texture}
-          repeat={[-4, 1]}
           lineWidth={1}
         />
       </mesh>
